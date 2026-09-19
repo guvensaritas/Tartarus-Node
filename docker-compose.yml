@@ -1,0 +1,13 @@
+version: '3.8'
+services:
+  tartarus-node:
+    build: .
+    container_name: tartarus_engine
+    ports:
+      - "2222:2222"
+      - "22:22"
+      - "23:23"
+      - "80:80"
+    volumes:
+      - ./state_memory:/app/state_memory
+    restart: unless-stopped

@@ -1,0 +1,2 @@
+# Tartarus-Node is built entirely using Python standard library modules.
+# No external dependencies required. Ensure Python 3.10+ and Ollama are installed locally.

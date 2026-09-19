@@ -1,0 +1,6 @@
+{
+  "listen_ports": [2222],
+  "dashboard_port": 8080,
+  "ollama_model": "huihui_ai/qwen3-abliterated:8b",
+  "slack_webhook": "YOUR_SLACK_WEBHOOK_URL_HERE"
+}
