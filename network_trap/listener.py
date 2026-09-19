@@ -1,9 +1,22 @@
 import socket
 import threading
 import time
-from tartarus_core.llm_bridge import process_command
+import logging
+import json
+from rate_limiter import register_request, check_ip_blocked
+from tartarus_core.llm_bridge import SecureLLMBridge
 from state_memory.tracker import log_attack
-from network_trap.firewall import check_ip_blocked, register_request
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger("Tartarus_Listener")
+
+try:
+    with open("config.json", "r") as f:
+        config = json.load(f)
+except FileNotFoundError:
+    config = {}
+
+llm_bridge = SecureLLMBridge(config)
 
 def handle_client(client_socket: socket.socket, client_address: tuple) -> None:
     ip_address = client_address[0]
@@ -16,54 +29,53 @@ def handle_client(client_socket: socket.socket, client_address: tuple) -> None:
         client_socket.close()
         return
 
-    session_id = f"{ip_address}_{int(time.time())}"
-    
     try:
-        client_socket.sendall(b"login: ")
+        client_socket.settimeout(120.0)
+        
+        client_socket.sendall(b"SSH-2.0-OpenSSH_9.2p1 Ubuntu-1ubuntu1.12\n")
         banner_received = client_socket.recv(1024).decode('utf-8', errors='ignore').strip()
         
         client_socket.sendall(b"Password: ")
         pass_received = client_socket.recv(1024).decode('utf-8', errors='ignore').strip()
         
-        log_attack(ip_address, f"LOGIN ATTEMPT: user={banner_received} pass={pass_received}")
+        log_attack(ip_address, f"LOGIN: user={banner_received} pass={pass_received}")
         
-        client_socket.sendall(b"\nWelcome to Ubuntu 22.04.3 LTS (GNU/Linux 5.15.0-88-generic x86_64)\n\n")
-        client_socket.sendall(b"root@prod-db-server:~# ")
+        client_socket.sendall(b"\nWelcome to Ubuntu 22.04.3 LTS\n\n")
+        client_socket.sendall(b"root@prod:~# ")
         
         while True:
             command = client_socket.recv(1024).decode('utf-8', errors='ignore').strip()
             if not command:
                 break
                 
-            if command.lower() in ("exit", "quit"):
+            if command.lower() in ("exit", "quit", "logout"):
                 client_socket.sendall(b"Connection closed by foreign host.\n")
                 break
                 
             log_attack(ip_address, command)
             
-            response = process_command(command, ip_address, session_id)
-            client_socket.sendall(response.encode('utf-8'))
+            response = llm_bridge.get_terminal_response(command)
             
-    except Exception:
-        pass
+            if response:
+                output = f"{response}\nroot@prod:~# "
+            else:
+                output = "root@prod:~# "
+                
+            client_socket.sendall(output.encode('utf-8'))
+            
+    except Exception as e:
+        logger.error(f"[{ip_address}] Hata: {str(e)}")
     finally:
         client_socket.close()
 
 def start_server(port: int) -> None:
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server.bind(('0.0.0.0', port))
+    server.listen(5)
     
-    try:
-        server.bind(('0.0.0.0', port))
-        server.listen(5)
-        
-        while True:
-            client_socket, client_address = server.accept()
-            client_thread = threading.Thread(
-                target=handle_client, 
-                args=(client_socket, client_address), 
-                daemon=True
-            )
-            client_thread.start()
-    except Exception:
-        server.close()
+    print(f"✅ SSH Honeypot aktif: port {port}")
+    
+    while True:
+        client_socket, client_address = server.accept()
+        threading.Thread(target=handle_client, args=(client_socket, client_address), daemon=True).start()

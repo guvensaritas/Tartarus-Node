@@ -1,41 +1,44 @@
-# Tartarus-Node
+# Tartarus-Node (AegisBlue) 🛡️
 
-Enterprise-grade, zero-dependency AI honeypot and dynamic deception network powered by local Large Language Models (Ollama).
+**Advanced LLM-Powered Cybersecurity Honeypot & Deception Engine**
 
-## Architecture
+Tartarus-Node is a production-ready, highly interactive deception system designed to act as an intelligent SSH honeypot. By bridging network intrusion attempts with an isolated Local Large Language Model (LLM), it dynamically analyzes, engages, and logs attacker behavior in real-time.
 
-Tartarus-Node is engineered for high-interaction threat deception, isolating attackers in a simulated terminal environment while safely capturing malicious payloads and streaming real-time telemetry to a local SOC dashboard.
+## ⚡ Core Architecture & Security Features
 
-```text
-[Attacker] ---> (TCP Ports) ---> [Listener / Firewall] ---> [Mirage Engine (Qwen)]
-                                         |
-                                         v
-                           [Quarantine / SIEM Tracker] ---> [SOC Dashboard]
-                           Core Modules
-main.py: Central orchestrator managing signal handlers, database initialization, and concurrent multi-port socket threads.
+* **LLM-Driven Deception:** Utilizes Ollama (`qwen3-abliterated:8b`) to generate dynamic, context-aware terminal responses, trapping attackers in endless loops.
+* **Zero-Dependency Core:** Built entirely on Python's standard library. No external pip packages required, ensuring zero supply-chain vulnerabilities.
+* **Military-Grade Hardening:** 
+  * Multi-stage Docker build minimizing the attack surface.
+  * Strict non-root execution (`appuser`).
+  * Deceptive directory permissions (`755`) allowing attackers to read decoy files while preventing malicious write/delete actions.
+* **Isolated Networking:** The LLM engine and the honeypot operate on an isolated Docker bridge network, unreachable from the public internet.
+* **SOC Dashboard:** A built-in, HTTP Basic Auth protected monitoring dashboard running on a dedicated port.
 
-network_trap/: Multi-port TCP concurrent listener equipped with active rate-limiting and dynamic IP quarantine firewall.
+## 🚀 Deployment (Production)
 
-tartarus_core/llm_bridge.py: Mirage Engine interfacing with local Ollama models for zero-safety-refusal interactive command simulation.
+### 1. Prerequisites
+Ensure you have Docker and Docker Compose installed on your host machine.
 
-tartarus_core/quarantine.py: Advanced payload isolation engine parsing URLs, enforcing strict size limits, and neutralizing binaries with honeypot headers.
+### 2. Configuration
+Clone the repository and prepare your environment configuration:
 
-state_memory/: SQLite-backed attack telemetry logger exporting SIEM JSON alerts and triggering automated webhook notifications.
-
-tartarus_core/dashboard.py: Zero-dependency embedded HTTP SOC dashboard providing real-time attack visualization.
-
-Quick Start
-Ensure Ollama is running locally with the target model:
-
-Bash
-ollama run huihui_ai/qwen3-abliterated:8b
-Clone the repository and configure your settings:
-
-Bash
+```bash
+git clone https://github.com/guvensaritas/tartarus-node.git
+cd tartarus-node
 cp config.json.example config.json
-Launch the deception framework:
+```
+Edit config.json to set your secure dashboard password and optional Slack webhook.
+
+3. Ignition
+Build and run the infrastructure in detached mode:
 
 Bash
-python main.py
-License
-Distributed under the MIT License. See LICENSE for more information.
+docker compose up --build -d
+4. Access
+Honeypot Listener: ssh root@<your-server-ip> -p 2222
+
+SOC Dashboard: http://<your-server-ip>:8080
+
+⚠️ Disclaimer
+This project is developed strictly for defensive cybersecurity, research, and educational purposes. Do not deploy this in environments without proper network isolation and authorization.

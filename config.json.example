@@ -1,6 +1,29 @@
 {
   "listen_ports": [2222],
   "dashboard_port": 8080,
-  "ollama_model": "huihui_ai/qwen3-abliterated:8b",
-  "slack_webhook": "YOUR_SLACK_WEBHOOK_URL_HERE"
+  "ollama": {
+    "model": "huihui_ai/qwen3-abliterated:8b",
+    "api_url": "http://ollama:11434/api/generate",
+    "timeout": 10,
+    "max_tokens": 1024,
+    "temperature": 0.0
+  },
+  "rate_limit": {
+    "max_requests": 15,
+    "time_window": 8,
+    "block_duration": 90
+  },
+  "slack_webhook": "YOUR_SLACK_WEBHOOK_URL_HERE",
+  "dangerous_keywords": [
+    "whoami", "cat /etc/passwd", "sudo", "rm -rf", "wget", "curl", "chmod",
+    "chown", "export", "python -c", "bash -i", "nc -e", "curl http"
+  ],
+  "dashboard": {
+    "username": "admin",
+    "password": "CHANGE_THIS_SECURE_PASSWORD"
+  },
+  "quarantine": {
+    "max_file_size": 8388608,
+    "max_log_size": 5242880
+  }
 }

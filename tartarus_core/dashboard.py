@@ -2,12 +2,34 @@ import os
 import json
 import sqlite3
 import threading
+import base64
+import logging
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger("Tartarus_Dashboard")
+
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 DB_PATH = os.path.join(BASE_DIR, "state_memory", "state_memory.db")
 QUARANTINE_LOG = os.path.join(BASE_DIR, "quarantine", "malware_intel.log")
+CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
+
+def get_auth_credentials():
+    """Fetch dynamic username/password from config.json (production ready)"""
+    try:
+        with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+            username = config.get("dashboard", {}).get("username", "admin")
+            password = config.get("dashboard", {}).get("password", "TartarusSecure2026")
+    except Exception:
+        username, password = "admin", "TartarusSecure2026"
+
+    credentials = f"{username}:{password}"
+    encoded = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
+    return f"Basic {encoded}"
+
+EXPECTED_AUTH = get_auth_credentials()
 
 HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
@@ -20,11 +42,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         h1 { color: #58a6ff; border-bottom: 1px solid #30363d; padding-bottom: 10px; }
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; }
         .card { background-color: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 15px; }
-        .card h2 { color: #3fb950; margin-top: 0; font-size: 1.2em; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { text-align: left; padding: 8px; border-bottom: 1px solid #30363d; font-size: 0.9em; }
-        th { color: #8b949e; }
         .alert { color: #f85149; font-weight: bold; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border-bottom: 1px solid #30363d; padding: 8px; text-align: left; }
+        th { color: #8b949e; }
     </style>
 </head>
 <body>
@@ -32,43 +53,24 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="grid">
         <div class="card">
             <h2>Live Attack Feed</h2>
-            <table id="attack-table">
-                <thead><tr><th>Time</th><th>IP</th><th>Location</th><th>Payload</th></tr></thead>
-                <tbody></tbody>
-            </table>
+            <table id="attack-table"><thead><tr><th>Time</th><th>IP</th><th>Location</th><th>Payload</th></tr></thead><tbody></tbody></table>
         </div>
         <div class="card">
-            <h2>Quarantine Zone (Captured Malware)</h2>
-            <table id="quarantine-table">
-                <thead><tr><th>Time</th><th>Source URL</th><th>SHA-256 / Hash</th></tr></thead>
-                <tbody></tbody>
-            </table>
+            <h2>Quarantine Zone</h2>
+            <table id="quarantine-table"><thead><tr><th>Time</th><th>Source URL</th><th>Hash</th></tr></thead><tbody></tbody></table>
         </div>
     </div>
     <script>
         async function fetchStats() {
             try {
                 const res = await fetch('/api/stats');
+                if (res.status === 401) { window.location.reload(); return; }
                 const data = await res.json();
-                
-                const attackTbody = document.querySelector('#attack-table tbody');
-                attackTbody.innerHTML = '';
-                data.attacks.forEach(atk => {
-                    const tr = document.createElement('tr');
-                    tr.innerHTML = `<td>${atk.timestamp}</td><td>${atk.ip}</td><td>${atk.geo}</td><td class="alert">${atk.cmd}</td>`;
-                    attackTbody.appendChild(tr);
-                });
-
-                const quarTbody = document.querySelector('#quarantine-table tbody');
-                quarTbody.innerHTML = '';
-                data.quarantine.forEach(q => {
-                    const tr = document.createElement('tr');
-                    tr.innerHTML = `<td>${q.time}</td><td>${q.url}</td><td style="color:#a5d6ff;">${q.hash}</td>`;
-                    quarTbody.appendChild(tr);
-                });
-            } catch (err) {
-                console.error("Dashboard Sync Error");
-            }
+                const atkBody = document.querySelector('#attack-table tbody');
+                atkBody.innerHTML = data.attacks.map(a => `<tr><td>${a.time}</td><td>${a.ip}</td><td>${a.geo}</td><td class="alert">${a.payload}</td></tr>`).join('');
+                const qrnBody = document.querySelector('#quarantine-table tbody');
+                qrnBody.innerHTML = data.quarantine.map(q => `<tr><td>${q.time}</td><td>${q.url}</td><td>${q.hash}</td></tr>`).join('');
+            } catch (e) { console.error("Dashboard fetch error", e); }
         }
         setInterval(fetchStats, 3000);
         fetchStats();
@@ -78,18 +80,26 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 """
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
-    """Handle requests in a separate thread."""
     daemon_threads = True
 
 class DashboardHandler(BaseHTTPRequestHandler):
-    """HTTP request handler for the SOC Dashboard."""
-    
-    def log_message(self, format, *args):
-        """Suppress default HTTP server logging."""
-        pass
+    def log_message(self, *args): pass
+
+    def check_auth(self):
+        auth_header = self.headers.get('Authorization')
+        if auth_header != EXPECTED_AUTH:
+            self.send_response(401)
+            self.send_header('WWW-Authenticate', 'Basic realm="Tartarus SOC"')
+            self.send_header('Content-type', 'text/html')
+            self.end_headers()
+            self.wfile.write(b"401 Unauthorized")
+            return False
+        return True
 
     def do_GET(self):
-        """Handle GET requests for UI and API endpoints."""
+        if not self.check_auth():
+            return
+
         if self.path == '/':
             self.send_response(200)
             self.send_header('Content-type', 'text/html')
@@ -97,62 +107,52 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.wfile.write(HTML_TEMPLATE.encode('utf-8'))
             
         elif self.path == '/api/stats':
+            payload = {"attacks": [], "quarantine": []}
+            
+            try:
+                if os.path.exists(DB_PATH):
+                    with sqlite3.connect(DB_PATH) as conn:
+                        cursor = conn.execute(
+                            "SELECT timestamp, ip_address, geo_location, command "
+                            "FROM attack_logs ORDER BY id DESC LIMIT 50"
+                        )
+                        for row in cursor.fetchall():
+                            payload["attacks"].append({
+                                "time": row[0].replace('T', ' '),
+                                "ip": row[1],
+                                "geo": row[2] if row[2] else "Unknown",
+                                "payload": row[3]
+                            })
+            except Exception as e:
+                logger.error(f"DB Read Error: {e}")
+
+            try:
+                if os.path.exists(QUARANTINE_LOG):
+                    with open(QUARANTINE_LOG, "r", encoding="utf-8") as f:
+                        lines = f.readlines()[-20:]
+                        for line in lines:
+                            parts = line.strip().split('|')
+                            if len(parts) >= 4:
+                                payload["quarantine"].append({
+                                    "time": parts[0],
+                                    "url": parts[1],
+                                    "hash": parts[2]
+                                })
+            except Exception:
+                pass
+
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
             self.end_headers()
-            
-            payload = {"attacks": [], "quarantine": []}
-            
-            if os.path.exists(DB_PATH):
-                try:
-                    conn = sqlite3.connect(DB_PATH)
-                    cursor = conn.cursor()
-                    cursor.execute(
-                        "SELECT timestamp, ip_address, geo_location, command "
-                        "FROM attack_logs ORDER BY id DESC LIMIT 10"
-                    )
-                    rows = cursor.fetchall()
-                    for r in rows:
-                        payload["attacks"].append({
-                            "timestamp": r[0].split('.')[0].replace('T', ' '),
-                            "ip": r[1],
-                            "geo": r[2],
-                            "cmd": r[3]
-                        })
-                    conn.close()
-                except sqlite3.Error:
-                    pass
-
-            if os.path.exists(QUARANTINE_LOG):
-                try:
-                    with open(QUARANTINE_LOG, 'r', encoding='utf-8') as f:
-                        lines = f.readlines()[-10:]
-                        for line in reversed(lines):
-                            if " | " in line:
-                                parts = line.split(" | ")
-                                time_val = parts[0].split("]")[0].strip("[")
-                                status_parts = {
-                                    k.strip(): v.strip() 
-                                    for k, v in (p.split("=") for p in parts[1:] if "=" in p)
-                                }
-                                
-                                url = status_parts.get("URL", "Unknown")
-                                hash_val = status_parts.get("SHA256", "-")
-                                
-                                payload["quarantine"].append({
-                                    "time": time_val, 
-                                    "url": url, 
-                                    "hash": hash_val
-                                })
-                except Exception:
-                    pass
-
             self.wfile.write(json.dumps(payload).encode('utf-8'))
+            
         else:
             self.send_error(404)
 
 def start_dashboard(port: int = 8080) -> None:
-    """Initializes and starts the dashboard server on a daemon thread."""
-    server = ThreadedHTTPServer(('0.0.0.0', port), DashboardHandler)
-    dash_thread = threading.Thread(target=server.serve_forever, daemon=True)
-    dash_thread.start()
+    try:
+        server = ThreadedHTTPServer(('0.0.0.0', port), DashboardHandler)
+        logger.info(f"✅ Secure SOC Dashboard active: port {port} (Protected by Basic Auth)")
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+    except Exception as e:
+        logger.error(f"Dashboard failed to start: {e}")

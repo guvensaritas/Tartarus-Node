@@ -1,2 +1,4 @@
-# Tartarus-Node is built entirely using Python standard library modules.
-# No external dependencies required. Ensure Python 3.10+ and Ollama are installed locally.
+# Tartarus-Node (AegisBlue) Requirements
+# Sadece Python standart kütüphaneleri (socket, json, sqlite3, threading, urllib vb.) kullanılmaktadır.
+# Sıfır dış bağımlılık (Zero Dependency) ilkesi gereği dış paket yüklenmesine gerek yoktur.
+# Bu dosya, Docker build sürecinin hata vermeden ve en güvenli/hafif şekilde tamamlanması için oluşturulmuştur.
