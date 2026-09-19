@@ -3,7 +3,7 @@ import threading
 import time
 import logging
 import json
-from rate_limiter import register_request, check_ip_blocked
+from tartarus_core.rate_limiter import register_request, check_ip_blocked
 from tartarus_core.llm_bridge import SecureLLMBridge
 from state_memory.tracker import log_attack
 
@@ -32,13 +32,17 @@ def handle_client(client_socket: socket.socket, client_address: tuple) -> None:
     try:
         client_socket.settimeout(120.0)
         
+        # Standart SSH akışı için önce istemcinin bağlantı kurmasını simüle ediyoruz
         client_socket.sendall(b"SSH-2.0-OpenSSH_9.2p1 Ubuntu-1ubuntu1.12\n")
-        banner_received = client_socket.recv(1024).decode('utf-8', errors='ignore').strip()
+        client_banner = client_socket.recv(1024).decode('utf-8', errors='ignore').strip()
+        
+        client_socket.sendall(b"login: ")
+        username = client_socket.recv(1024).decode('utf-8', errors='ignore').strip()
         
         client_socket.sendall(b"Password: ")
         pass_received = client_socket.recv(1024).decode('utf-8', errors='ignore').strip()
         
-        log_attack(ip_address, f"LOGIN: user={banner_received} pass={pass_received}")
+        log_attack(ip_address, f"LOGIN: user={username} pass={pass_received}")
         
         client_socket.sendall(b"\nWelcome to Ubuntu 22.04.3 LTS\n\n")
         client_socket.sendall(b"root@prod:~# ")

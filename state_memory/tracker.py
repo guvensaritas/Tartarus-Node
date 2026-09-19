@@ -92,3 +92,9 @@ def track_command(command, output, session_id, ip_address):
     dangerous_keywords = ["whoami", "cat /etc/passwd", "sudo", "wget", "curl", "rm -rf"]
     if any(kw in command for kw in dangerous_keywords):
         send_slack_alert(ip_address, geo_location, command)
+
+def log_attack(ip_address: str, command: str, output: str = "") -> None:
+    """Listener modülünden gelen çağrıları veritabanı ve SIEM kayıt sistemine yönlendirir."""
+    init_db()
+    session_id = "default_session"
+    track_command(command, output, session_id, ip_address)

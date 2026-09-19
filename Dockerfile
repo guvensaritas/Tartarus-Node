@@ -35,7 +35,7 @@ COPY --from=builder /usr/local/bin/ /usr/local/bin/
 
 # Application files 
 COPY --chown=appuser:appuser main.py .
-COPY --chown=appuser:appuser rate_limiter.py .
+COPY --chown=appuser:appuser tartarus_core/rate_limiter.py ./tartarus_core/
 COPY --chown=appuser:appuser network_trap/ ./network_trap/
 COPY --chown=appuser:appuser tartarus_core/ ./tartarus_core/
 COPY --chown=appuser:appuser config.json .
