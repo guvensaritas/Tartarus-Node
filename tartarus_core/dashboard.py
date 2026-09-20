@@ -16,14 +16,22 @@ QUARANTINE_LOG = os.path.join(BASE_DIR, "quarantine", "malware_intel.log")
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
 
 def get_auth_credentials():
-    """Fetch dynamic username/password from config.json (production ready)"""
+    """Fetch dynamic username/password from config.json (Strict Production Security)"""
+    if not os.path.exists(CONFIG_PATH):
+        raise FileNotFoundError(f"Critical Security Error: Config file not found at {CONFIG_PATH}. Copy config.json.example to config.json.")
+    
     try:
         with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
             config = json.load(f)
-            username = config.get("dashboard", {}).get("username", "admin")
-            password = config.get("dashboard", {}).get("password", "TartarusSecure2026")
-    except Exception:
-        username, password = "admin", "TartarusSecure2026"
+            dashboard_cfg = config.get("dashboard", {})
+            username = dashboard_cfg.get("username")
+            password = dashboard_cfg.get("password")
+            
+            if not username or not password:
+                raise ValueError("Dashboard username or password missing in config.json!")
+    except Exception as e:
+        logger.error(f"Authentication configuration error: {e}")
+        raise
 
     credentials = f"{username}:{password}"
     encoded = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
